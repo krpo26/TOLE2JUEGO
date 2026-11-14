@@ -1,0 +1,56 @@
+workflows:
+  android-apk:
+    name: Brawlers Online - Android APK
+    max_build_duration: 30
+    instance_type: linux_x2
+    environment:
+      flutter: stable
+      java: 17
+      vars:
+        # Pega aquí los datos de tu app Android en Firebase (Configuración del proyecto)
+        FB_API_KEY: "PEGA_API_KEY"
+        FB_APP_ID: "PEGA_APP_ID"
+        FB_SENDER_ID: "PEGA_SENDER_ID"
+        FB_PROJECT_ID: "PEGA_PROJECT_ID"
+        FB_DB_URL: "PEGA_DATABASE_URL"
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+    scripts:
+      - name: Generar plataforma Android (si no existe)
+        script: |
+          set -e
+          if [ ! -d android ]; then
+            mkdir -p /tmp/bak && cp -r lib pubspec.yaml /tmp/bak/
+            flutter create . --platforms=android --org com.tuestudio --project-name brawlers_online
+            rm -rf lib test
+            cp -r /tmp/bak/lib lib
+            cp /tmp/bak/pubspec.yaml pubspec.yaml
+          fi
+      - name: Permiso de internet y minSdk 23
+        script: |
+          set -e
+          M=android/app/src/main/AndroidManifest.xml
+          grep -q "android.permission.INTERNET" $M || sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET"/>\n    <application#' $M
+          for f in android/app/build.gradle android/app/build.gradle.kts; do
+            [ -f "$f" ] && sed -i -E 's/minSdk(Version)?[ =]+flutter\.minSdkVersion/minSdk = 23/' "$f" || true
+          done
+      - name: Dependencias
+        script: flutter pub get
+      - name: Compilar APK
+        script: |
+          flutter build apk --release \
+            --dart-define=FB_API_KEY=$FB_API_KEY \
+            --dart-define=FB_APP_ID=$FB_APP_ID \
+            --dart-define=FB_SENDER_ID=$FB_SENDER_ID \
+            --dart-define=FB_PROJECT_ID=$FB_PROJECT_ID \
+            --dart-define=FB_DB_URL=$FB_DB_URL
+    artifacts:
+      - build/app/outputs/flutter-apk/*.apk
+    publishing:
+      email:
+        recipients:
+          - tu_correo@ejemplo.com
